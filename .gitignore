@@ -1,4 +1,17 @@
-geoclip_models/*
-.venv/*
-.vscode/*
-__pycache__/*
+# checkpoints — large binaries
+checkpoints*/
+*.pt
+*.pth
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+*.egg-info/
+dist/
+build/
+
+# data outputs (kept locally, too large for git)
+geovit_model/
+figures/
