@@ -90,3 +90,20 @@ eval.py        — haversine distance evaluation
 runner.py      — entry point, config, orchestration
 predict.py     — single-image inference CLI
 ```
+
+## Acknowledgements
+
+geoKrid builds on the ideas and prior work of:
+
+**GeoCLIP** — Vivanco et al., NeurIPS 2023. Introduced contrastive image–location alignment using CLIP embeddings for worldwide geolocation. geoKrid uses CLIP as its visual backbone and draws on GeoCLIP's framing of geolocation as a retrieval problem.
+
+```
+@inproceedings{geoclip,
+  title={GeoCLIP: Clip-Inspired Alignment between Locations and Images for Effective Worldwide Geo-localization},
+  author={Vivanco, Vicente and Nayak, Gaurav Kumar and Shah, Mubarak},
+  booktitle={Advances in Neural Information Processing Systems},
+  year={2023}
+}
+```
+
+**GeoViT** — extended GeoCLIP with a larger ViT-L/14@336 backbone and ROCm compatibility patches. The unfold+linear Conv2d workaround for gfx1100 originates from this work and is preserved in geoKrid's `model.py`.
