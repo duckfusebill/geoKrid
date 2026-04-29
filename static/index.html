@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>geoKrid</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f0f0f;
+      color: #e8e8e8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      color: #666;
+      font-size: 0.9rem;
+      margin-bottom: 40px;
+    }
+
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 28px;
+      width: 100%;
+      max-width: 560px;
+      margin-bottom: 24px;
+    }
+
+    #drop-zone {
+      border: 2px dashed #333;
+      border-radius: 8px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    #drop-zone.drag-over {
+      border-color: #4f9eff;
+      background: rgba(79, 158, 255, 0.05);
+    }
+
+    #drop-zone input[type=file] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    #drop-zone .icon { font-size: 2rem; margin-bottom: 10px; }
+    #drop-zone .label { color: #888; font-size: 0.95rem; }
+    #drop-zone .label span { color: #4f9eff; }
+
+    #preview-wrap {
+      display: none;
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    #preview {
+      max-width: 100%;
+      max-height: 280px;
+      border-radius: 8px;
+      border: 1px solid #2a2a2a;
+      object-fit: cover;
+    }
+
+    #submit-btn {
+      margin-top: 20px;
+      width: 100%;
+      padding: 12px;
+      background: #4f9eff;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+
+    #submit-btn:hover { background: #3a8eef; }
+    #submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #results { display: none; }
+
+    #map {
+      height: 320px;
+      border-radius: 8px;
+      border: 1px solid #2a2a2a;
+      margin-bottom: 20px;
+    }
+
+    .pred-list { list-style: none; }
+
+    .pred-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 0;
+      border-bottom: 1px solid #222;
+    }
+    .pred-item:last-child { border-bottom: none; }
+
+    .pred-rank {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .rank-1 { background: #4f9eff; color: #fff; }
+    .rank-2 { background: #2a2a2a; color: #aaa; }
+    .rank-3 { background: #2a2a2a; color: #aaa; }
+    .rank-4 { background: #2a2a2a; color: #aaa; }
+    .rank-5 { background: #2a2a2a; color: #aaa; }
+
+    .pred-coords {
+      flex: 1;
+      font-size: 0.95rem;
+      font-family: monospace;
+    }
+
+    .pred-prob {
+      font-size: 0.85rem;
+      color: #666;
+      text-align: right;
+    }
+    .pred-item.rank-1-item .pred-prob { color: #4f9eff; font-weight: 600; }
+
+    .maps-link {
+      display: inline-block;
+      margin-left: 10px;
+      font-size: 0.75rem;
+      color: #4f9eff;
+      text-decoration: none;
+    }
+    .maps-link:hover { text-decoration: underline; }
+
+    .error-msg {
+      color: #ff5f5f;
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 10px 0;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #map-toolbar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .map-tool-btn {
+      padding: 6px 14px;
+      background: #2a2a2a;
+      color: #aaa;
+      border: 1px solid #333;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .map-tool-btn:hover { background: #333; color: #e8e8e8; }
+    .map-tool-btn.active { background: #4f9eff22; color: #4f9eff; border-color: #4f9eff55; }
+  </style>
+</head>
+<body>
+
+<h1>geoKrid</h1>
+<p class="subtitle">Grid-based US geolocation — drop a street-level photo</p>
+
+<div class="card">
+  <div id="drop-zone">
+    <input type="file" id="file-input" accept="image/*" />
+    <div class="icon">📍</div>
+    <div class="label">Drag &amp; drop an image or <span>browse</span></div>
+  </div>
+
+  <div id="preview-wrap">
+    <img id="preview" src="" alt="preview" />
+  </div>
+
+  <button id="submit-btn" disabled>Predict location</button>
+  <div id="error" class="error-msg"></div>
+</div>
+
+<div class="card" id="results">
+  <div id="map-toolbar">
+    <button id="grid-btn" class="map-tool-btn">Show grid</button>
+    <label id="opacity-wrap" class="map-tool-btn" style="display:none;gap:8px;align-items:center;cursor:default">
+      <span style="white-space:nowrap">Opacity</span>
+      <input id="opacity-slider" type="range" min="0" max="100" value="60"
+             style="width:80px;accent-color:#4f9eff;cursor:pointer" />
+    </label>
+  </div>
+  <div id="map"></div>
+  <ul class="pred-list" id="pred-list"></ul>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6/src/index.js" type="module" id="d3-delaunay-mod"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6"></script>
+<script>
+  const dropZone   = document.getElementById("drop-zone");
+  const fileInput  = document.getElementById("file-input");
+  const preview    = document.getElementById("preview");
+  const previewWrap = document.getElementById("preview-wrap");
+  const submitBtn  = document.getElementById("submit-btn");
+  const errorDiv   = document.getElementById("error");
+  const resultsCard = document.getElementById("results");
+  const predList   = document.getElementById("pred-list");
+
+  let selectedFile    = null;
+  let leafletMap      = null;
+  let markersLayer    = null;
+  let gridLayer       = null;
+  let gridVisible     = false;
+  let cellsCache      = null;
+  let lastPredCellIds = [];
+  let gridOpacity     = 0.6;
+
+  const US_BOUNDS = [-128, 22, -63, 51];
+
+  const gridBtn      = document.getElementById("grid-btn");
+  const opacityWrap  = document.getElementById("opacity-wrap");
+  const opacitySlider = document.getElementById("opacity-slider");
+
+  gridBtn.addEventListener("click", async () => {
+    if (!leafletMap) return;
+    gridVisible = !gridVisible;
+    gridBtn.textContent = gridVisible ? "Hide grid" : "Show grid";
+    gridBtn.classList.toggle("active", gridVisible);
+    opacityWrap.style.display = gridVisible ? "flex" : "none";
+
+    if (gridVisible) await drawGrid(lastPredCellIds);
+    else if (gridLayer) gridLayer.clearLayers();
+  });
+
+  opacitySlider.addEventListener("input", () => {
+    gridOpacity = opacitySlider.value / 100;
+    if (gridVisible) drawGrid(lastPredCellIds);
+  });
+
+  async function fetchCells() {
+    if (cellsCache) return cellsCache;
+    const res = await fetch("/cells");
+    cellsCache = await res.json();
+    // precompute log-normalised coverage (0→1)
+    const counts = cellsCache.map(c => c.count);
+    const logMin = Math.log1p(Math.min(...counts));
+    const logMax = Math.log1p(Math.max(...counts));
+    cellsCache.forEach(c => {
+      c._t = (Math.log1p(c.count) - logMin) / (logMax - logMin); // 0=sparse 1=dense
+    });
+    return cellsCache;
+  }
+
+  // coverage colour: sparse=deep blue, dense=bright orange  (HSL interpolation)
+  function coverageColor(t) {
+    const h = Math.round(240 - t * 200);   // 240 blue → 40 orange
+    const s = Math.round(50 + t * 45);
+    const l = Math.round(25 + t * 40);
+    return `hsl(${h},${s}%,${l}%)`;
+  }
+
+  async function drawGrid(highlightIds = []) {
+    if (!gridLayer) {
+      gridLayer = L.layerGroup().addTo(leafletMap);
+    } else {
+      gridLayer.clearLayers();
+    }
+
+    const cells  = await fetchCells();
+    const points = cells.map(c => [c.lon_center, c.lat_center]);
+
+    const delaunay = d3.Delaunay.from(points);
+    const voronoi  = delaunay.voronoi(US_BOUNDS);
+    const hitSet   = new Set(highlightIds);
+
+    for (let i = 0; i < cells.length; i++) {
+      const poly = voronoi.cellPolygon(i);
+      if (!poly) continue;
+
+      const latlngs = poly.map(([lon, lat]) => [lat, lon]);
+      const cell    = cells[i];
+      const isHit   = hitSet.has(cell.cell_id);
+      const color   = isHit ? "#ffffff" : coverageColor(cell._t);
+
+      L.polygon(latlngs, {
+        color:       color,
+        weight:      isHit ? 2 : 0.5,
+        opacity:     gridOpacity * (isHit ? 1 : 0.6),
+        fillColor:   color,
+        fillOpacity: gridOpacity * (isHit ? 0.35 : 0.22),
+      }).addTo(gridLayer);
+    }
+  }
+
+  // drag-and-drop styling
+  dropZone.addEventListener("dragover",  e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+  dropZone.addEventListener("dragleave", ()  => dropZone.classList.remove("drag-over"));
+  dropZone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropZone.classList.remove("drag-over");
+    const file = e.dataTransfer.files[0];
+    if (file) loadFile(file);
+  });
+
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) loadFile(fileInput.files[0]);
+  });
+
+  // Ctrl+V paste support
+  document.addEventListener("paste", e => {
+    const item = [...e.clipboardData.items].find(i => i.type.startsWith("image/"));
+    if (item) loadFile(item.getAsFile());
+  });
+
+  function loadFile(file) {
+    selectedFile = file;
+    const url = URL.createObjectURL(file);
+    preview.src = url;
+    previewWrap.style.display = "block";
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Predict location";
+    errorDiv.textContent = "";
+    resultsCard.style.display = "none";
+    predList.innerHTML = "";
+    if (markersLayer) markersLayer.clearLayers();
+  }
+
+  submitBtn.addEventListener("click", async () => {
+    if (!selectedFile) return;
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner"></span>Running model…';
+    errorDiv.textContent = "";
+
+    const form = new FormData();
+    form.append("image", selectedFile);
+
+    try {
+      const res = await fetch("/predict", { method: "POST", body: form });
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      renderResults(data.predictions);
+    } catch (err) {
+      errorDiv.textContent = "Error: " + err.message;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Predict location";
+    }
+  });
+
+  async function renderResults(preds) {
+    resultsCard.style.display = "block";
+    predList.innerHTML = "";
+
+    // store predicted cell ids; refresh grid if visible
+    lastPredCellIds = preds.map(p => p.cell_id);
+    if (gridVisible) drawGrid(lastPredCellIds);
+
+    // init or reset map
+    if (!leafletMap) {
+      leafletMap = L.map("map", { zoomControl: true });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors"
+      }).addTo(leafletMap);
+      markersLayer = L.layerGroup().addTo(leafletMap);
+    } else {
+      markersLayer.clearLayers();
+    }
+
+    const maxProb = preds[0].prob;
+    const totalProb = preds.reduce((s, p) => s + p.prob, 0);
+
+    // probability-weighted centroid
+    const wLat = preds.reduce((s, p) => s + p.lat * p.prob, 0) / totalProb;
+    const wLon = preds.reduce((s, p) => s + p.lon * p.prob, 0) / totalProb;
+
+    const bounds = [[wLat, wLon]];
+
+    // consensus marker — crosshair pin
+    const consensusIcon = L.divIcon({
+      className: "",
+      html: `<div style="
+        width:22px;height:22px;border-radius:50%;
+        background:#00e5a0;border:3px solid #fff;
+        box-shadow:0 0 10px #00e5a0;
+      "></div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+    L.marker([wLat, wLon], { icon: consensusIcon })
+      .bindPopup(`<b>Consensus</b><br>${wLat.toFixed(5)}, ${wLon.toFixed(5)}`)
+      .addTo(markersLayer);
+
+    // consensus row at top of list
+    const consensusLi = document.createElement("li");
+    consensusLi.className = "pred-item";
+    consensusLi.style.borderBottom = "1px solid #333";
+    consensusLi.style.marginBottom = "6px";
+    consensusLi.innerHTML = `
+      <div class="pred-rank" style="background:#00e5a0;color:#000">~</div>
+      <div class="pred-coords"><strong>Consensus</strong>&nbsp;
+        ${wLat.toFixed(5)}, ${wLon.toFixed(5)}
+        <a class="maps-link" href="https://www.google.com/maps?q=${wLat.toFixed(5)},${wLon.toFixed(5)}" target="_blank">Maps ↗</a>
+      </div>
+      <div class="pred-prob" style="color:#00e5a0">${totalProb.toFixed(1)}%</div>
+    `;
+    predList.appendChild(consensusLi);
+
+    preds.forEach(p => {
+      const intensity = p.prob / maxProb;
+      const size      = Math.round(8 + intensity * 16);
+      const opacity   = (0.25 + intensity * 0.75).toFixed(2);
+      const hue       = Math.round(210 - intensity * 60);
+      const color     = `hsl(${hue}, 85%, 60%)`;
+
+      const markerIcon = L.divIcon({
+        className: "",
+        html: `<div style="
+          width:${size}px;height:${size}px;border-radius:50%;
+          background:${color};border:2px solid rgba(255,255,255,0.8);
+          opacity:${opacity};box-shadow:0 0 ${Math.round(intensity*8)}px ${color}
+        "></div>`,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+      });
+
+      bounds.push([p.lat, p.lon]);
+      L.marker([p.lat, p.lon], { icon: markerIcon })
+        .bindPopup(`<b>#${p.rank}</b> ${p.lat}, ${p.lon}<br>${p.prob}%`)
+        .addTo(markersLayer);
+
+      // distance from this prediction to weighted consensus
+      const dist = haversineKm(wLat, wLon, p.lat, p.lon);
+      const distStr = dist < 1 ? `${(dist * 1000).toFixed(0)} m` : `${dist.toFixed(1)} km`;
+
+      const hue2 = Math.round(210 - intensity * 60);
+      const itemColor = `hsl(${hue2}, 85%, 60%)`;
+      const li = document.createElement("li");
+      li.className = "pred-item";
+      li.innerHTML = `
+        <div class="pred-rank" style="background:${itemColor};color:#fff;opacity:${(0.3 + intensity * 0.7).toFixed(2)}">${p.rank}</div>
+        <div class="pred-coords" style="opacity:${(0.4 + intensity * 0.6).toFixed(2)}">${p.lat}, ${p.lon}
+          <a class="maps-link" href="https://www.google.com/maps?q=${p.lat},${p.lon}" target="_blank">Maps ↗</a>
+          <span style="color:#555;font-size:0.75rem;margin-left:6px">${distStr} from consensus</span>
+        </div>
+        <div class="pred-prob" style="color:${itemColor}">${p.prob}%</div>
+      `;
+      predList.appendChild(li);
+    });
+
+    if (bounds.length > 1) {
+      leafletMap.fitBounds(bounds, { padding: [40, 40] });
+    } else {
+      leafletMap.setView(bounds[0], 7);
+    }
+    resultsCard.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+              Math.sin(dLon/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+</script>
+</body>
+</html>
