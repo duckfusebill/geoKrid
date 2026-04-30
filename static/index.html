@@ -198,6 +198,48 @@
     }
     .map-tool-btn:hover { background: #333; color: #e8e8e8; }
     .map-tool-btn.active { background: #4f9eff22; color: #4f9eff; border-color: #4f9eff55; }
+
+    .model-controls {
+      display: flex;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .model-controls label {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 0.78rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .model-controls select {
+      background: #111;
+      color: #e8e8e8;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 28px;
+    }
+
+    .model-controls select:focus { outline: none; border-color: #4f9eff; }
+
+    #active-config {
+      font-size: 0.78rem;
+      color: #555;
+      text-align: center;
+      margin-top: 6px;
+      min-height: 1em;
+    }
   </style>
 </head>
 <body>
@@ -215,6 +257,21 @@
   <div id="preview-wrap">
     <img id="preview" src="" alt="preview" />
   </div>
+
+  <div class="model-controls">
+    <label>
+      Checkpoint
+      <select id="ckpt-select"><option value="">Loading…</option></select>
+    </label>
+    <label>
+      Inference head
+      <select id="head-select">
+        <option value="consensus">Optimized consensus (T+spatial+geo-median)</option>
+        <option value="top1">Top-1 argmax (sharpest single guess)</option>
+      </select>
+    </label>
+  </div>
+  <div id="active-config"></div>
 
   <button id="submit-btn" disabled>Predict location</button>
   <div id="error" class="error-msg"></div>
@@ -237,14 +294,37 @@
 <script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6/src/index.js" type="module" id="d3-delaunay-mod"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6"></script>
 <script>
-  const dropZone   = document.getElementById("drop-zone");
-  const fileInput  = document.getElementById("file-input");
-  const preview    = document.getElementById("preview");
+  const dropZone    = document.getElementById("drop-zone");
+  const fileInput   = document.getElementById("file-input");
+  const preview     = document.getElementById("preview");
   const previewWrap = document.getElementById("preview-wrap");
-  const submitBtn  = document.getElementById("submit-btn");
-  const errorDiv   = document.getElementById("error");
+  const submitBtn   = document.getElementById("submit-btn");
+  const errorDiv    = document.getElementById("error");
   const resultsCard = document.getElementById("results");
-  const predList   = document.getElementById("pred-list");
+  const predList    = document.getElementById("pred-list");
+  const ckptSelect  = document.getElementById("ckpt-select");
+  const headSelect  = document.getElementById("head-select");
+  const activeConfig = document.getElementById("active-config");
+
+  // populate checkpoint dropdown
+  (async () => {
+    try {
+      const res  = await fetch("/checkpoints");
+      const data = await res.json();
+      ckptSelect.innerHTML = "";
+      data.checkpoints.forEach(name => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        // label: epoch number + "(best)" tag for the default
+        const epoch = name.match(/(\d+)/)?.[1] ?? name;
+        opt.textContent = `Epoch ${parseInt(epoch, 10)}${name === data.default ? "  ✓ best" : ""}`;
+        if (name === data.default) opt.selected = true;
+        ckptSelect.appendChild(opt);
+      });
+    } catch {
+      ckptSelect.innerHTML = '<option value="">unavailable</option>';
+    }
+  })();
 
   let selectedFile    = null;
   let leafletMap      = null;
@@ -374,6 +454,8 @@
 
     const form = new FormData();
     form.append("image", selectedFile);
+    form.append("checkpoint", ckptSelect.value);
+    form.append("head", headSelect.value);
 
     try {
       const res = await fetch("/predict", { method: "POST", body: form });
@@ -381,7 +463,11 @@
 
       if (data.error) throw new Error(data.error);
 
-      renderResults(data.predictions, data.consensus);
+      const epoch = (data.checkpoint || "").match(/(\d+)/)?.[1];
+      const headLabel = data.head === "top1" ? "Top-1 argmax" : "Optimized consensus";
+      activeConfig.textContent = `Epoch ${parseInt(epoch, 10)}  ·  ${headLabel}`;
+
+      renderResults(data.predictions, data.consensus, data.head);
     } catch (err) {
       errorDiv.textContent = "Error: " + err.message;
     } finally {
@@ -390,7 +476,7 @@
     }
   });
 
-  async function renderResults(preds, serverConsensus) {
+  async function renderResults(preds, serverConsensus, head) {
     resultsCard.style.display = "block";
     predList.innerHTML = "";
 
@@ -433,11 +519,11 @@
     consensusLi.style.marginBottom = "6px";
     consensusLi.innerHTML = `
       <div class="pred-rank" style="background:#00e5a0;color:#000">~</div>
-      <div class="pred-coords"><strong>Consensus</strong>&nbsp;
+      <div class="pred-coords"><strong>${head === "top1" ? "Top-1" : "Consensus"}</strong>&nbsp;
         ${cLat.toFixed(5)}, ${cLon.toFixed(5)}
         <a class="maps-link" href="https://www.google.com/maps?q=${cLat},${cLon}" target="_blank">Maps ↗</a>
       </div>
-      <div class="pred-prob" style="color:#00e5a0">top-10</div>
+      <div class="pred-prob" style="color:#00e5a0">${head === "top1" ? "argmax" : "top-10"}</div>
     `;
     predList.appendChild(consensusLi);
 
