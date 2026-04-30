@@ -14,7 +14,9 @@ app = Flask(__name__, static_folder="static", static_url_path="")
 CELLS_CSV   = os.environ.get("CELLS_CSV",   "cells.csv")
 CKPT_DIR    = os.environ.get("CKPT_DIR",    "checkpoints_kmeans")
 DEVICE      = os.environ.get("DEVICE",      "cuda" if torch.cuda.is_available() else "cpu")
-TOP_K       = 5
+TOP_K       = 10          # expanded candidate pool
+TEMPERATURE = 1.8         # calibrated softmax temperature (flattens overconfident peaks)
+SIGMA_KM    = 150.0       # spatial re-weighting bandwidth
 
 _model = None
 
@@ -44,6 +46,29 @@ def get_model():
     return _model
 
 
+def _haversine(lat1, lon1, lat2, lon2):
+    R = 6371.0
+    dlat = np.radians(lat2 - lat1)
+    dlon = np.radians(lon2 - lon1)
+    a = np.sin(dlat/2)**2 + np.cos(np.radians(lat1)) * np.cos(np.radians(lat2)) * np.sin(dlon/2)**2
+    return 2 * R * np.arcsin(np.sqrt(np.clip(a, 0, 1)))
+
+
+def _geometric_median(coords, weights, eps=1e-5, max_iter=50):
+    """Weiszfeld algorithm — weighted geometric median, robust to outliers."""
+    weights = np.array(weights)
+    estimate = np.average(coords, weights=weights, axis=0)
+    for _ in range(max_iter):
+        dists = np.array([_haversine(estimate[0], estimate[1], c[0], c[1]) for c in coords])
+        dists = np.maximum(dists, eps)
+        w = weights / dists
+        new_estimate = np.average(coords, weights=w, axis=0)
+        if np.linalg.norm(new_estimate - estimate) < eps:
+            break
+        estimate = new_estimate
+    return estimate
+
+
 @app.route("/")
 def index():
     return send_from_directory("static", "index.html")
@@ -65,22 +90,52 @@ def predict():
 
     model = get_model()
     with torch.no_grad():
-        logits = model(x)                         # (1, N)
-        probs  = logits.softmax(dim=-1)[0]        # (N,)
+        logits = model(x)                              # (1, N)
+        probs  = (logits / TEMPERATURE).softmax(dim=-1)[0]   # temperature scaling
         top    = torch.topk(probs, TOP_K)
 
+    indices = top.indices.tolist()
+    raw_probs = top.values.tolist()
+
+    coords = np.array([model.cell_centers[i].tolist() for i in indices])  # (K, 2)
+
+    # spatial consistency re-weighting
+    # boost predictions that cluster geographically with other high-prob predictions
+    spatially_weighted = []
+    for i in range(TOP_K):
+        score = 0.0
+        for j in range(TOP_K):
+            if i == j:
+                continue
+            d = _haversine(coords[i][0], coords[i][1], coords[j][0], coords[j][1])
+            score += raw_probs[j] * np.exp(-d / SIGMA_KM)
+        spatially_weighted.append(raw_probs[i] * (1.0 + score))
+
+    total = sum(spatially_weighted)
+    reweighted = [w / total for w in spatially_weighted]
+
+    # geometric median via Weiszfeld iterations (robust to outliers)
+    consensus = _geometric_median(coords, reweighted)
+
     results = []
-    for rank, (idx, prob) in enumerate(zip(top.indices.tolist(), top.values.tolist())):
-        lat, lon = model.cell_centers[idx].tolist()
+    for rank, (idx, rw_prob, raw_prob) in enumerate(zip(indices, reweighted, raw_probs)):
+        lat, lon = coords[rank]
         results.append({
             "rank":    rank + 1,
             "cell_id": idx,
-            "lat":     round(lat, 5),
-            "lon":     round(lon, 5),
-            "prob":    round(prob * 100, 2),
+            "lat":     round(float(lat), 5),
+            "lon":     round(float(lon), 5),
+            "prob":    round(rw_prob * 100, 2),
+            "raw_prob": round(raw_prob * 100, 2),
         })
 
-    return jsonify({"predictions": results})
+    return jsonify({
+        "predictions": results,
+        "consensus": {
+            "lat": round(float(consensus[0]), 5),
+            "lon": round(float(consensus[1]), 5),
+        }
+    })
 
 
 @app.route("/cells")

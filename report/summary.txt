@@ -1,0 +1,36 @@
+============================================================
+geoKrid  —  Validation Report
+checkpoint: checkpoints_kmeans/epoch_012.pt
+val images: 63,338
+============================================================
+
+Top-1 prediction
+  avg    113.4 km  |  median 13.1 km
+  acc@1km       0.98%
+  acc@25km      64.30%
+  acc@100km     79.69%
+  acc@200km     85.82%
+  acc@750km     96.32%
+  acc@2500km    99.74%
+
+Weighted consensus
+  avg    116.4 km  |  median 30.9 km
+  acc@1km       0.45%
+  acc@25km      45.26%
+  acc@100km     73.75%
+  acc@200km     84.67%
+  acc@750km     97.30%
+  acc@2500km    99.84%
+
+============================================================
+Regional breakdown  (consensus_km median)
+============================================================
+  South                           median   17.0 km  mean   106.5 km  n=5,007
+  Texas / Oklahoma                median   18.6 km  mean   106.2 km  n=337
+  Pacific Coast                   median   19.6 km  mean    98.6 km  n=11,553
+  Mountain West                   median   20.3 km  mean    86.5 km  n=7,817
+  Northeast                       median   31.1 km  mean   109.9 km  n=10,240
+  Midwest                         median   45.9 km  mean   143.1 km  n=14,815
+  Southeast                       median   47.7 km  mean   114.2 km  n=8,852
+  Other                           median   52.8 km  mean   144.4 km  n=2,317
+  Mid-Atlantic                    median   58.8 km  mean   166.8 km  n=2,400

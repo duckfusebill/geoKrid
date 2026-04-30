@@ -381,7 +381,7 @@
 
       if (data.error) throw new Error(data.error);
 
-      renderResults(data.predictions);
+      renderResults(data.predictions, data.consensus);
     } catch (err) {
       errorDiv.textContent = "Error: " + err.message;
     } finally {
@@ -390,15 +390,13 @@
     }
   });
 
-  async function renderResults(preds) {
+  async function renderResults(preds, serverConsensus) {
     resultsCard.style.display = "block";
     predList.innerHTML = "";
 
-    // store predicted cell ids; refresh grid if visible
     lastPredCellIds = preds.map(p => p.cell_id);
     if (gridVisible) drawGrid(lastPredCellIds);
 
-    // init or reset map
     if (!leafletMap) {
       leafletMap = L.map("map", { zoomControl: true });
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -409,16 +407,12 @@
       markersLayer.clearLayers();
     }
 
+    // use server-computed geometric median consensus
+    const cLat = serverConsensus.lat;
+    const cLon = serverConsensus.lon;
     const maxProb = preds[0].prob;
-    const totalProb = preds.reduce((s, p) => s + p.prob, 0);
+    const bounds = [[cLat, cLon]];
 
-    // probability-weighted centroid
-    const wLat = preds.reduce((s, p) => s + p.lat * p.prob, 0) / totalProb;
-    const wLon = preds.reduce((s, p) => s + p.lon * p.prob, 0) / totalProb;
-
-    const bounds = [[wLat, wLon]];
-
-    // consensus marker — crosshair pin
     const consensusIcon = L.divIcon({
       className: "",
       html: `<div style="
@@ -429,11 +423,10 @@
       iconSize: [22, 22],
       iconAnchor: [11, 11],
     });
-    L.marker([wLat, wLon], { icon: consensusIcon })
-      .bindPopup(`<b>Consensus</b><br>${wLat.toFixed(5)}, ${wLon.toFixed(5)}`)
+    L.marker([cLat, cLon], { icon: consensusIcon })
+      .bindPopup(`<b>Consensus</b><br>${cLat.toFixed(5)}, ${cLon.toFixed(5)}`)
       .addTo(markersLayer);
 
-    // consensus row at top of list
     const consensusLi = document.createElement("li");
     consensusLi.className = "pred-item";
     consensusLi.style.borderBottom = "1px solid #333";
@@ -441,10 +434,10 @@
     consensusLi.innerHTML = `
       <div class="pred-rank" style="background:#00e5a0;color:#000">~</div>
       <div class="pred-coords"><strong>Consensus</strong>&nbsp;
-        ${wLat.toFixed(5)}, ${wLon.toFixed(5)}
-        <a class="maps-link" href="https://www.google.com/maps?q=${wLat.toFixed(5)},${wLon.toFixed(5)}" target="_blank">Maps ↗</a>
+        ${cLat.toFixed(5)}, ${cLon.toFixed(5)}
+        <a class="maps-link" href="https://www.google.com/maps?q=${cLat},${cLon}" target="_blank">Maps ↗</a>
       </div>
-      <div class="pred-prob" style="color:#00e5a0">${totalProb.toFixed(1)}%</div>
+      <div class="pred-prob" style="color:#00e5a0">top-10</div>
     `;
     predList.appendChild(consensusLi);
 
@@ -471,8 +464,7 @@
         .bindPopup(`<b>#${p.rank}</b> ${p.lat}, ${p.lon}<br>${p.prob}%`)
         .addTo(markersLayer);
 
-      // distance from this prediction to weighted consensus
-      const dist = haversineKm(wLat, wLon, p.lat, p.lon);
+      const dist = haversineKm(cLat, cLon, p.lat, p.lon);
       const distStr = dist < 1 ? `${(dist * 1000).toFixed(0)} m` : `${dist.toFixed(1)} km`;
 
       const hue2 = Math.round(210 - intensity * 60);

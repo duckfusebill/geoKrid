@@ -1,0 +1,42 @@
+============================================================
+geoKrid vs GeoCLIP — Error Analysis
+n = 2,000 val images
+============================================================
+
+  geoKrid    top-1
+    median 13.22 km  |  mean 103.78 km
+    MSE  85893.1 km²  |  RMSE 293.08 km
+    acc@25km   64.10%
+    acc@100km   80.65%
+    acc@200km   87.40%
+    acc@750km   96.75%
+
+  geoKrid    consensus (geo-median, top-10, spatial reweight)
+    median 17.55 km  |  mean 104.17 km
+    MSE  77146.7 km²  |  RMSE 277.75 km
+    acc@25km   58.95%
+    acc@100km   79.40%
+    acc@200km   86.75%
+    acc@750km   96.90%
+
+  GeoCLIP    top-1
+    median 264.90 km  |  mean 519.92 km
+    MSE  1831471.9 km²  |  RMSE 1353.32 km
+    acc@25km   7.80%
+    acc@100km   23.95%
+    acc@200km   40.80%
+    acc@750km   84.90%
+
+  GeoCLIP    consensus (geo-median, top-5, spatial reweight)
+    median 239.75 km  |  mean 493.00 km
+    MSE  1831980.7 km²  |  RMSE 1353.51 km
+    acc@25km   8.55%
+    acc@100km   25.90%
+    acc@200km   43.90%
+    acc@750km   86.85%
+
+============================================================
+geoKrid consensus vs GeoCLIP top-1:
+  median improvement:  +247.3 km
+  MSE improvement:     +1754325.2 km²
+============================================================
